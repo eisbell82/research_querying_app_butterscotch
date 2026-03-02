@@ -101,28 +101,145 @@ Go to **Deploy → Manage deployments**, click the pencil icon, set version to *
 
 ## Deploying with clasp (Version Control)
 
-[clasp](https://developers.google.com/apps-script/guides/clasp) lets you push from this repo directly to Apps Script.
+`clasp` (Command Line Apps Script) is Google's official tool for pushing code from your local machine — or this Git repo — directly into an Apps Script project. This replaces copy-pasting files into the browser editor.
+
+### Prerequisites
+
+You need [Node.js](https://nodejs.org) installed (any version ≥ 14). Verify with:
 
 ```bash
-# Install clasp
+node --version
+```
+
+---
+
+### Step 1 — Install clasp
+
+```bash
 npm install -g @google/clasp
+```
 
-# Authenticate
+---
+
+### Step 2 — Log in to your Google Account
+
+```bash
 clasp login
+```
 
-# Set up your config
+This opens a browser window asking you to sign in and grant clasp access to your Google account. Complete the login, then return to your terminal.
+
+---
+
+### Step 3 — Enable the Apps Script API
+
+clasp requires the Apps Script API to be turned on for your account (it's off by default):
+
+1. Go to: **https://script.google.com/home/usersettings**
+2. Toggle **"Google Apps Script API"** to **On**
+
+You only need to do this once.
+
+---
+
+### Step 4 — Create an Apps Script project
+
+Go to **https://script.google.com** and click **New project**. Give it a name like `Research Database`.
+
+Now copy the **Script ID** from the URL in your browser:
+
+```
+https://script.google.com/home/projects/SCRIPT_ID_IS_THIS_PART/edit
+```
+
+It looks like a long string of letters and numbers, for example:
+```
+1BxG4v7mKzL9sQpN2rYdFw8uAeHjTcOiVbZmXnPqRsDtUfWgYhIkJl
+```
+
+---
+
+### Step 5 — Configure clasp for this repo
+
+Copy the example config file and fill in your Script ID:
+
+```bash
+cd research_querying_app_butterscotch
 cp .clasp.json.example .clasp.json
-# Edit .clasp.json — set "scriptId" to your Apps Script project ID
-# (found in the script editor URL: script.google.com/d/SCRIPT_ID/edit)
+```
 
-# Push to Apps Script
+Open `.clasp.json` and replace the placeholder with your Script ID:
+
+```json
+{
+  "scriptId": "1BxG4v7mKzL9sQpN2rYdFw8uAeHjTcOiVbZmXnPqRsDtUfWgYhIkJl",
+  "rootDir": "./src"
+}
+```
+
+> `.clasp.json` is listed in `.gitignore` so your Script ID is not committed to the repo.
+
+---
+
+### Step 6 — Push the code
+
+```bash
 clasp push
+```
 
-# Open in browser to deploy
+This uploads all files in `src/` to your Apps Script project. You should see output like:
+
+```
+└─ src/appsscript.json
+└─ src/Code.gs
+└─ src/Index.html
+└─ src/JavaScript.html
+└─ src/Stylesheet.html
+Pushed 5 files.
+```
+
+---
+
+### Step 7 — Deploy the web app (first time)
+
+```bash
 clasp open
 ```
 
-After `clasp push`, deploy via **Deploy → New deployment** in the browser.
+This opens the Apps Script editor in your browser. From there:
+
+1. Click **Deploy → New deployment**
+2. Click the gear icon next to "Select type" → **Web app**
+3. Set:
+   - **Execute as**: `Me`
+   - **Who has access**: `Anyone`
+4. Click **Deploy**
+5. Copy the **Web app URL** — this is your shareable link
+
+---
+
+### Everyday workflow (after initial setup)
+
+Once set up, your Git workflow is:
+
+```bash
+# 1. Edit files in src/ as needed
+# 2. Commit your changes
+git add src/
+git commit -m "describe your change"
+
+# 3. Push to Git remote
+git push
+
+# 4. Sync to Apps Script
+clasp push
+
+# 5. Publish a new version in the browser (required to go live)
+#    Deploy → Manage deployments → pencil icon → New version → Deploy
+clasp open  # opens the editor so you can click through step 5
+```
+
+> **Why is the browser step required?** Apps Script separates "code" from "deployments". A deployment is a snapshot — users always see the last published version, not your latest push. This prevents live users from seeing half-finished edits. You manually publish when you're ready.
 
 ---
 
