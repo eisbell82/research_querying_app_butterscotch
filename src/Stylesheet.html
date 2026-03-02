@@ -1,0 +1,256 @@
+<style>
+/* ── Design Tokens ──────────────────────────────────────────── */
+:root {
+  --primary:       #1e3a5f;
+  --primary-light: #2c5282;
+  --primary-faint: #eff6ff;
+  --accent:        #3b82f6;
+  --surface:       #f0f4f8;
+  --card-shadow:   0 2px 12px rgba(0,0,0,.07);
+  --card-radius:   12px;
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+body {
+  background: var(--surface);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #1f2937;
+}
+
+/* ── Navbar ─────────────────────────────────────────────────── */
+.navbar {
+  background: var(--primary) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  min-height: 56px;
+}
+.navbar-brand { letter-spacing: .01em; }
+
+/* ── Filter Card ────────────────────────────────────────────── */
+.filter-card {
+  border: none;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+.filter-label {
+  display: block;
+  font-size: .75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 4px;
+}
+.input-group-text { background: white; }
+
+/* ── Table ──────────────────────────────────────────────────── */
+.exp-table-wrapper {
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  background: white;
+}
+.exp-table {
+  margin-bottom: 0;
+}
+.exp-table thead th {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: .84rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.exp-table thead th:first-child { border-radius: var(--card-radius) 0 0 0; }
+.exp-table thead th:last-child  { border-radius: 0 var(--card-radius) 0 0; }
+
+.exp-table.sortable th,
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover { background: var(--primary-light); }
+.sort-icon { opacity: .45; font-size: .72rem; margin-left: 3px; }
+.sort-icon.active { opacity: 1; color: #93c5fd; }
+
+.exp-table tbody tr {
+  cursor: pointer;
+  transition: background .12s;
+}
+.exp-table tbody tr:hover td { background: var(--primary-faint); }
+.exp-table td {
+  padding: 11px 16px;
+  vertical-align: middle;
+  border-color: #f0f4f8;
+  font-size: .9rem;
+}
+
+/* ── Status Badges ──────────────────────────────────────────── */
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: .76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.s-planning    { background: #dbeafe; color: #1d4ed8; }
+.s-in-progress { background: #fef3c7; color: #92400e; }
+.s-completed   { background: #dcfce7; color: #166534; }
+.s-on-hold     { background: #fee2e2; color: #991b1b; }
+.s-archived    { background: #f3f4f6; color: #4b5563; }
+
+/* ── Tag Pills ──────────────────────────────────────────────── */
+.tag-pill {
+  display: inline-block;
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: .74rem;
+  margin: 1px 2px;
+  white-space: nowrap;
+}
+
+/* ── Experiment Cards ───────────────────────────────────────── */
+.exp-card {
+  border: none;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow .18s, transform .18s;
+  cursor: pointer;
+  height: 100%;
+  background: white;
+}
+.exp-card:hover {
+  box-shadow: 0 6px 24px rgba(0,0,0,.13);
+  transform: translateY(-2px);
+}
+.exp-card .card-body { padding: 1.25rem; }
+.exp-card .card-id {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: .78rem;
+  color: var(--accent);
+}
+.exp-card .card-title {
+  font-size: .95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: .35rem;
+}
+.exp-card .card-excerpt {
+  font-size: .82rem;
+  color: #6b7280;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Pagination ─────────────────────────────────────────────── */
+.page-link { color: var(--primary); cursor: pointer; }
+.page-item.active .page-link {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ── Detail Modal ───────────────────────────────────────────── */
+.detail-section { margin-bottom: 1.5rem; }
+.detail-section .section-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--primary);
+  border-bottom: 2px solid #dbeafe;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+.detail-section .section-value {
+  font-size: .9rem;
+  color: #374151;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.detail-section .section-value.empty { color: #9ca3af; font-style: italic; }
+
+/* ── Form Tabs ──────────────────────────────────────────────── */
+.form-tabs {
+  border-bottom: 2px solid #e5e7eb;
+  gap: 4px;
+}
+.form-tabs .nav-link {
+  color: #6b7280;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 8px 16px;
+  font-size: .9rem;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  margin-bottom: -2px;
+}
+.form-tabs .nav-link:hover { color: var(--primary); }
+.form-tabs .nav-link.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+  background: none;
+}
+
+/* ── Empty State ────────────────────────────────────────────── */
+.empty-state {
+  padding: 4rem 1rem;
+  text-align: center;
+}
+.empty-state .empty-icon {
+  font-size: 3.5rem;
+  color: #d1d5db;
+  display: block;
+  margin-bottom: 1rem;
+}
+.empty-state p { color: #9ca3af; }
+
+/* ── Toast ──────────────────────────────────────────────────── */
+.toast { min-width: 300px; }
+.toast-body { font-size: .9rem; }
+
+/* ── Misc ───────────────────────────────────────────────────── */
+code.exp-id {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: .82rem;
+  color: var(--accent);
+}
+.view-btn { color: #6b7280; }
+.view-btn:hover { color: var(--primary); }
+
+/* ── Responsive tweaks ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .navbar-brand span { font-size: .95rem; }
+  .exp-table thead { display: none; }
+  .exp-table tbody tr {
+    display: block;
+    margin-bottom: .75rem;
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+  }
+  .exp-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: none;
+    padding: 8px 12px;
+  }
+  .exp-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: .78rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    min-width: 100px;
+  }
+}
+</style>

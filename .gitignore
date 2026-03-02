@@ -1,0 +1,16 @@
+# Google Apps Script clasp config (contains your script ID — keep private or treat as non-sensitive)
+# Uncomment the line below if you want to keep scriptId out of version control:
+# .clasp.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
