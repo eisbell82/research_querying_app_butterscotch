@@ -41,205 +41,85 @@ The app manages an `Experiments` sheet with these columns:
 
 ---
 
-## Setup — Two Paths
+## Setup
 
-### Path A: Container-Bound Script (Easiest)
+### Step 1 — Create or open your Google Sheet
 
-Best when you already have a Google Sheet and want the script to live inside it.
-
-1. **Open your Google Sheet** in Google Drive
-2. Click **Extensions → Apps Script**
-3. Delete all existing code in the editor
-4. Copy the contents of `src/Code.gs` and paste it into the editor
-5. Click **+** next to "Files" and add three HTML files:
-   - `Index` — paste from `src/Index.html`
-   - `Stylesheet` — paste from `src/Stylesheet.html`
-   - `JavaScript` — paste from `src/JavaScript.html`
-6. Leave `SPREADSHEET_ID = ''` in `Code.gs` (empty = uses the active spreadsheet automatically)
-7. Go to **Deploy → New deployment** and follow the [Deployment steps](#deployment) below
-
-### Path B: Standalone Script + Spreadsheet ID (Recommended for Teams)
-
-Best for keeping the script separate from the sheet and using `clasp` for version control.
-
-1. **Create a Google Sheet** at [sheets.google.com](https://sheets.google.com)
-2. Copy the **Spreadsheet ID** from the URL:
-   ```
-   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
-   ```
-3. Open `src/Code.gs` and paste your ID:
-   ```javascript
-   const SPREADSHEET_ID = 'your-spreadsheet-id-here';
-   ```
-4. **Create a new Apps Script project** at [script.google.com](https://script.google.com) → **New project**
-5. Upload your files using [clasp](#deploying-with-clasp) or paste each file manually
-6. Go to **Deploy → New deployment** and follow the [Deployment steps](#deployment) below
+Go to [sheets.google.com](https://sheets.google.com) and create a new blank sheet, or open an existing one. The app will create the `Experiments` tab inside it automatically on first use.
 
 ---
 
-## Deployment
+### Step 2 — Open the Apps Script editor
 
-In the Apps Script editor:
+Inside your Google Sheet, click **Extensions → Apps Script** in the top menu. This opens the script editor in a new browser tab.
 
-1. Click **Deploy → New deployment**
+---
+
+### Step 3 — Add the script files
+
+You'll add five files total. The editor starts with one file called `Code.gs` — use that for the first file, then create the rest.
+
+**File 1 — `Code.gs`** (already exists in the editor)
+
+1. Open [`src/Code.gs`](src/Code.gs) in this repo
+2. Select all the text and copy it
+3. In the Apps Script editor, select all existing code and replace it with what you copied
+4. At the top of the file, find this line and paste in your Spreadsheet ID:
+   ```javascript
+   const SPREADSHEET_ID = ''; // ← paste your ID here
+   ```
+   Your Spreadsheet ID is the long string in your sheet's URL:
+   ```
+   https://docs.google.com/spreadsheets/d/THIS_PART_HERE/edit
+   ```
+   Leave it empty (`''`) if you opened the script from inside the sheet — it will connect automatically.
+
+**Files 2–5 — HTML files**
+
+For each of the following, click the **+** button next to "Files" in the left sidebar, choose **HTML**, name it exactly as shown, then paste in the contents from this repo:
+
+| File name to create | Copy contents from |
+|---------------------|--------------------|
+| `Index`             | [`src/Index.html`](src/Index.html) |
+| `Stylesheet`        | [`src/Stylesheet.html`](src/Stylesheet.html) |
+| `JavaScript`        | [`src/JavaScript.html`](src/JavaScript.html) |
+
+> The file names must match exactly — the code references them by name.
+
+---
+
+### Step 4 — Save everything
+
+Click the floppy disk icon (or press `Ctrl+S` / `Cmd+S`) to save. Do this for each file.
+
+---
+
+### Step 5 — Deploy as a web app
+
+1. Click **Deploy → New deployment** in the top right
 2. Click the gear icon next to "Select type" → choose **Web app**
 3. Configure:
-   - **Execute as**: `Me` *(uses your credentials to read/write the sheet)*
-   - **Who has access**: `Anyone` *(no Google login required — anyone with the link can use the app)*
-4. Click **Deploy** and copy the **Web app URL**
-
-Share that URL with your team. That URL is your app.
-
-> **Access control:** The URL is the access gate. Share it only with intended users.
-> To require Google login, change "Who has access" to `Anyone with Google Account`.
-
-### Redeploying after edits
-
-Go to **Deploy → Manage deployments**, click the pencil icon, set version to **"New version"**, click **Deploy**.
-
----
-
-## Deploying with clasp (Version Control)
-
-`clasp` (Command Line Apps Script) is Google's official tool for pushing code from your local machine — or this Git repo — directly into an Apps Script project. This replaces copy-pasting files into the browser editor.
-
-### Prerequisites
-
-You need [Node.js](https://nodejs.org) installed (any version ≥ 14). Verify with:
-
-```bash
-node --version
-```
-
----
-
-### Step 1 — Install clasp
-
-```bash
-npm install -g @google/clasp
-```
-
----
-
-### Step 2 — Log in to your Google Account
-
-```bash
-clasp login
-```
-
-This opens a browser window asking you to sign in and grant clasp access to your Google account. Complete the login, then return to your terminal.
-
----
-
-### Step 3 — Enable the Apps Script API
-
-clasp requires the Apps Script API to be turned on for your account (it's off by default):
-
-1. Go to: **https://script.google.com/home/usersettings**
-2. Toggle **"Google Apps Script API"** to **On**
-
-You only need to do this once.
-
----
-
-### Step 4 — Create an Apps Script project
-
-Go to **https://script.google.com** and click **New project**. Give it a name like `Research Database`.
-
-Now copy the **Script ID** from the URL in your browser:
-
-```
-https://script.google.com/home/projects/SCRIPT_ID_IS_THIS_PART/edit
-```
-
-It looks like a long string of letters and numbers, for example:
-```
-1BxG4v7mKzL9sQpN2rYdFw8uAeHjTcOiVbZmXnPqRsDtUfWgYhIkJl
-```
-
----
-
-### Step 5 — Configure clasp for this repo
-
-Copy the example config file and fill in your Script ID:
-
-```bash
-cd research_querying_app_butterscotch
-cp .clasp.json.example .clasp.json
-```
-
-Open `.clasp.json` and replace the placeholder with your Script ID:
-
-```json
-{
-  "scriptId": "1BxG4v7mKzL9sQpN2rYdFw8uAeHjTcOiVbZmXnPqRsDtUfWgYhIkJl",
-  "rootDir": "./src"
-}
-```
-
-> `.clasp.json` is listed in `.gitignore` so your Script ID is not committed to the repo.
-
----
-
-### Step 6 — Push the code
-
-```bash
-clasp push
-```
-
-This uploads all files in `src/` to your Apps Script project. You should see output like:
-
-```
-└─ src/appsscript.json
-└─ src/Code.gs
-└─ src/Index.html
-└─ src/JavaScript.html
-└─ src/Stylesheet.html
-Pushed 5 files.
-```
-
----
-
-### Step 7 — Deploy the web app (first time)
-
-```bash
-clasp open
-```
-
-This opens the Apps Script editor in your browser. From there:
-
-1. Click **Deploy → New deployment**
-2. Click the gear icon next to "Select type" → **Web app**
-3. Set:
    - **Execute as**: `Me`
    - **Who has access**: `Anyone`
 4. Click **Deploy**
-5. Copy the **Web app URL** — this is your shareable link
+5. Google may ask you to authorize the app — click through the prompts and approve
+6. Copy the **Web app URL** at the end — this is your shareable link
+
+Share that URL with your team. Anyone with the link can use the app immediately.
+
+> **Access control:** The URL is the access gate — only share it with people who should have access. To require a Google login instead, change "Who has access" to `Anyone with Google Account`.
 
 ---
 
-### Everyday workflow (after initial setup)
+### Updating the app after changes
 
-Once set up, your Git workflow is:
+If the code in this repo is updated and you want to apply the changes:
 
-```bash
-# 1. Edit files in src/ as needed
-# 2. Commit your changes
-git add src/
-git commit -m "describe your change"
-
-# 3. Push to Git remote
-git push
-
-# 4. Sync to Apps Script
-clasp push
-
-# 5. Publish a new version in the browser (required to go live)
-#    Deploy → Manage deployments → pencil icon → New version → Deploy
-clasp open  # opens the editor so you can click through step 5
-```
-
-> **Why is the browser step required?** Apps Script separates "code" from "deployments". A deployment is a snapshot — users always see the last published version, not your latest push. This prevents live users from seeing half-finished edits. You manually publish when you're ready.
+1. Copy the updated file contents from this repo into the Apps Script editor (same as setup)
+2. Save
+3. Click **Deploy → Manage deployments**
+4. Click the pencil icon on your existing deployment
+5. Set version to **"New version"** and click **Deploy**
 
 ---
 
@@ -266,9 +146,6 @@ research_querying_app_butterscotch/
 │   ├── Index.html          # HTML template (includes CSS/JS via the include() helper)
 │   ├── Stylesheet.html     # All CSS (Bootstrap 5 + custom styles)
 │   └── JavaScript.html     # All client-side JS (search, filter, render, submit)
-├── .clasp.json.example     # Copy to .clasp.json and fill in your scriptId
-├── .claspignore            # Files excluded from clasp push
-├── .gitignore
 └── README.md
 ```
 
@@ -313,4 +190,4 @@ if (!allowedDomains.some(d => user.endsWith('@' + d))) {
 | Old version showing after edits | Redeploy with "New version" in Manage deployments |
 | Permission error on save | Ensure the deploying account has editor access to the sheet |
 | Dropdowns empty | Add at least one experiment — categories/researchers populate from existing data |
-| `clasp push` fails | Run `clasp login` again and verify `.clasp.json` has the correct `scriptId` |
+| Authorization error on deploy | Re-run authorization: Deploy → Manage deployments → authorize again |
