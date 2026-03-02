@@ -106,6 +106,7 @@ function openModal(){
   g('mt').textContent='New Experiment';
   g('bsv').textContent='Add Experiment';
   clearForm();
+  g('attSec').style.display='none';
   g('mov').classList.add('open');
   setTimeout(function(){g('fTitle').focus();},50);
 }
@@ -126,10 +127,19 @@ function openEdit(e){
   g('fResults').value=e['Results']||'';
   g('fObservations').value=e['Observations']||'';
   g('fNotes').value=e['Notes']||'';
+  g('attSec').style.display='block';
+  g('attLinkForm').style.display='none';
+  linkFormOpen=false;
+  loadAttachments(e['ID']);
   g('mov').classList.add('open');
 }
 
-function closeModal(){g('mov').classList.remove('open');editId=null;}
+function closeModal(){
+  g('mov').classList.remove('open');
+  editId=null;
+  linkFormOpen=false;
+  g('attLinkForm').style.display='none';
+}
 
 function clearForm(){
   ['fTitle','fResearcher','fCategory','fTags','fDescription','fHypothesis',
@@ -191,4 +201,123 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){closeModal();closeCon();}
   if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&g('mov').classList.contains('open'))saveExperiment();
 });
+
+// ── Attachments ──────────────────────────────────────────────────
+
+var linkFormOpen=false;
+
+function loadAttachments(experimentId){
+  g('attList').innerHTML='<div class="att-loading"><div class="att-spin"></div>Loading…</div>';
+  google.script.run
+    .withSuccessHandler(renderAttachments)
+    .withFailureHandler(function(){
+      g('attList').innerHTML='<div class="att-empty">Could not load attachments.</div>';
+    })
+    .getAttachments(experimentId);
+}
+
+function renderAttachments(attachments){
+  if(!attachments||attachments.error){
+    g('attList').innerHTML='<div class="att-empty">Could not load attachments.</div>';
+    return;
+  }
+  if(!attachments.length){
+    g('attList').innerHTML='<div class="att-empty">No attachments yet — upload a CSV/Excel file or link a Google Sheet.</div>';
+    return;
+  }
+  g('attList').innerHTML=attachments.map(function(a){
+    var ext=getFileExt(a.MimeType,a.FileName);
+    var dateStr=a.UploadedDate?formatDate(a.UploadedDate):'';
+    var typeLabel=a.Type==='link'?'Linked':'Uploaded';
+    return '<div class="att-row">'+
+      '<span class="att-icon att-icon-'+ext.toLowerCase()+'">'+ext+'</span>'+
+      '<span class="att-name" title="'+esc(a.FileName)+'">'+esc(a.FileName)+'</span>'+
+      (dateStr?'<span class="att-date" title="'+typeLabel+'">'+dateStr+'</span>':'')+
+      '<div class="att-actions">'+
+      '<a class="btn-att-open" href="'+esc(a.ViewLink)+'" target="_blank">Open</a>'+
+      '<button class="btn-att-del" onclick="deleteAttachmentUI(\''+esc(a.AttachmentID)+'\')" title="Remove">×</button>'+
+      '</div>'+
+      '</div>';
+  }).join('');
+}
+
+function getFileExt(mimeType,filename){
+  if(mimeType==='application/vnd.google-apps.spreadsheet') return 'SHEET';
+  var fname=(filename||'').toLowerCase();
+  if(fname.endsWith('.csv')||mimeType==='text/csv') return 'CSV';
+  if(fname.endsWith('.xlsx')||mimeType==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'XLSX';
+  if(fname.endsWith('.xls')||mimeType==='application/vnd.ms-excel') return 'XLS';
+  var dot=fname.lastIndexOf('.');
+  var ext=dot>=0?fname.slice(dot+1).toUpperCase():'';
+  return ext||'FILE';
+}
+
+function handleFileUpload(input){
+  var file=input.files[0];
+  if(!file) return;
+  if(file.size>10*1024*1024){
+    toast('File too large. Maximum size is 10 MB.','error');
+    input.value='';
+    return;
+  }
+  var btn=g('btnUpload');
+  btn.style.opacity='0.5';
+  btn.style.pointerEvents='none';
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var base64=ev.target.result.split(',')[1];
+    google.script.run
+      .withSuccessHandler(function(r){
+        btn.style.opacity='';
+        btn.style.pointerEvents='';
+        input.value='';
+        if(r&&r.error){toast(r.error,'error');return;}
+        toast('File attached \u2713','success');
+        loadAttachments(editId);
+      })
+      .withFailureHandler(function(e){
+        btn.style.opacity='';
+        btn.style.pointerEvents='';
+        input.value='';
+        toast(e.message,'error');
+      })
+      .uploadAttachment(editId,file.name,file.type||'application/octet-stream',base64);
+  };
+  reader.readAsDataURL(file);
+}
+
+function toggleLinkForm(){
+  linkFormOpen=!linkFormOpen;
+  g('attLinkForm').style.display=linkFormOpen?'flex':'none';
+  if(linkFormOpen) setTimeout(function(){g('attUrl').focus();},50);
+}
+
+function submitLink(){
+  var url=g('attUrl').value.trim();
+  var name=g('attName').value.trim();
+  if(!url){toast('Please enter a Google Sheets URL.','error');return;}
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.error){toast(r.error,'error');return;}
+      toast('Sheet linked \u2713','success');
+      g('attUrl').value='';
+      g('attName').value='';
+      toggleLinkForm();
+      loadAttachments(editId);
+    })
+    .withFailureHandler(function(e){toast(e.message,'error');})
+    .linkGoogleSheet(editId,url,name);
+}
+
+function deleteAttachmentUI(attachmentId){
+  if(!confirm('Remove this attachment?')) return;
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.error){toast(r.error,'error');return;}
+      toast('Attachment removed','success');
+      loadAttachments(editId);
+    })
+    .withFailureHandler(function(e){toast(e.message,'error');})
+    .deleteAttachment(attachmentId);
+}
 </script>

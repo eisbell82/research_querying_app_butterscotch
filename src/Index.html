@@ -84,6 +84,32 @@
       <div class="fl"><label>Observations</label><textarea id="fObservations" rows="2" placeholder="Notable observations, unexpected findings…"></textarea></div>
       <div class="fl"><label>Notes</label><textarea id="fNotes" rows="2" placeholder="Additional notes, troubleshooting…"></textarea></div>
     </div>
+
+    <!-- Attachments — visible only when editing an existing experiment -->
+    <div class="att-sec" id="attSec" style="display:none">
+      <div class="att-hdr">
+        <span>Attachments</span>
+        <div class="att-btns">
+          <label class="btn-att" id="btnUpload" title="Upload CSV or Excel (max 10 MB)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Attach File
+            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" style="display:none" onchange="handleFileUpload(this)"/>
+          </label>
+          <button class="btn-att" onclick="toggleLinkForm()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            Link Sheet
+          </button>
+        </div>
+      </div>
+      <div class="att-link-form" id="attLinkForm" style="display:none">
+        <input type="url" id="attUrl" placeholder="https://docs.google.com/spreadsheets/…" onkeydown="if(event.key==='Enter')submitLink()"/>
+        <input type="text" id="attName" placeholder="Label (optional)" onkeydown="if(event.key==='Enter')submitLink()"/>
+        <button class="btn-link-add" onclick="submitLink()">Add</button>
+        <button class="btn-link-cancel" onclick="toggleLinkForm()">Cancel</button>
+      </div>
+      <div id="attList" class="att-list"></div>
+    </div>
+
     <div class="mf">
       <div class="ma">
         <button class="btn-cn" onclick="closeModal()">Cancel</button>
