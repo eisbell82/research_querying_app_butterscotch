@@ -1,596 +1,194 @@
 <script>
-// ============================================================
-// Research Database — Client-Side Application Logic
-// ============================================================
+var experiments=[], editId=null, curF='All';
 
-// ── State ────────────────────────────────────────────────────
-const state = {
-  experiments:      [],   // Current filtered+sorted dataset
-  currentView:      'table',
-  sortCol:          'Timestamp',
-  sortDir:          'desc',
-  currentPage:      1,
-  pageSize:         25,
-  currentExp:       null, // Experiment shown in detail modal
-  isEditing:        false,
-  activeTab:        'basic',
-  searchDebounce:   null,
-};
+function g(id){return document.getElementById(id);}
 
-// ── Bootstrap modal instances (lazy-initialized)
-let modalDetail = null;
-let modalAdd    = null;
-
-// ── Init ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  modalDetail = new bootstrap.Modal(document.getElementById('detailModal'));
-  modalAdd    = new bootstrap.Modal(document.getElementById('addModal'));
-
-  // Load metadata (categories, researchers) and experiments in parallel
+window.onload=function(){
   google.script.run
     .withSuccessHandler(handleMetaLoaded)
-    .withFailureHandler(err => showToast('Failed to load app data: ' + err.message, 'danger'))
+    .withFailureHandler(function(){})
     .getAppMeta();
-
   loadExperiments();
-});
+};
 
-// ── Metadata ─────────────────────────────────────────────────
-function handleMetaLoaded(meta) {
-  populateSelect('filterCategory', meta.categories, 'All Categories');
-  populateSelect('filterResearcher', meta.researchers, 'All Researchers');
-  populateDatalist('categoryList', meta.categories);
-  populateDatalist('researcherList', meta.researchers);
+function handleMetaLoaded(meta){
+  if(!meta) return;
+  populateDatalist('categoryList', meta.categories||[]);
+  populateDatalist('researcherList', meta.researchers||[]);
 }
 
-function populateSelect(id, items, placeholder) {
-  const sel = document.getElementById(id);
-  // Keep the first (placeholder) option, replace the rest
-  while (sel.options.length > 1) sel.remove(1);
-  items.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    sel.appendChild(opt);
-  });
+function populateDatalist(id, items){
+  var dl=g(id); if(!dl) return;
+  dl.innerHTML=items.map(function(v){return'<option value="'+esc(v)+'"/>';}).join('');
 }
 
-function populateDatalist(id, items) {
-  const dl = document.getElementById(id);
-  if (!dl) return;
-  dl.innerHTML = items.map(v => `<option value="${esc(v)}">`).join('');
-}
-
-// ── Data Loading ─────────────────────────────────────────────
-function buildFilterParams() {
-  return {
-    search:     document.getElementById('searchInput').value.trim(),
-    category:   document.getElementById('filterCategory').value,
-    status:     document.getElementById('filterStatus').value,
-    researcher: document.getElementById('filterResearcher').value,
-    dateFrom:   document.getElementById('filterDateFrom').value,
-    dateTo:     document.getElementById('filterDateTo').value,
-    sortCol:    state.sortCol,
-    sortDir:    state.sortDir,
-  };
-}
-
-function loadExperiments() {
-  setLoading(true);
+function loadExperiments(){
+  g('ml').style.display='block';
+  g('grid').style.display='none';
+  g('empty').style.display='none';
   google.script.run
-    .withSuccessHandler(data => {
-      state.experiments = data;
-      state.currentPage = 1;
-      renderView();
-      updateFilterIndicator();
-      setLoading(false);
+    .withSuccessHandler(function(d){
+      g('ml').style.display='none';
+      experiments=Array.isArray(d)?d:[];
+      render();
     })
-    .withFailureHandler(err => {
-      showToast('Error loading experiments: ' + err.message, 'danger');
-      setLoading(false);
+    .withFailureHandler(function(e){
+      g('ml').style.display='none';
+      toast('Error loading experiments: '+e.message,'error');
     })
-    .getExperiments(buildFilterParams());
+    .getExperiments({});
 }
 
-// ── Filtering ────────────────────────────────────────────────
-function applyFilters() {
-  loadExperiments();
-}
-
-function debounceSearch() {
-  const btn = document.getElementById('clearSearchBtn');
-  btn.style.display = document.getElementById('searchInput').value ? 'block' : 'none';
-  clearTimeout(state.searchDebounce);
-  state.searchDebounce = setTimeout(applyFilters, 380);
-}
-
-function clearSearch() {
-  document.getElementById('searchInput').value = '';
-  document.getElementById('clearSearchBtn').style.display = 'none';
-  applyFilters();
-}
-
-function clearFilters() {
-  document.getElementById('searchInput').value = '';
-  document.getElementById('filterCategory').value   = '';
-  document.getElementById('filterStatus').value     = '';
-  document.getElementById('filterResearcher').value = '';
-  document.getElementById('filterDateFrom').value   = '';
-  document.getElementById('filterDateTo').value     = '';
-  document.getElementById('clearSearchBtn').style.display = 'none';
-  applyFilters();
-}
-
-function updateFilterIndicator() {
-  const params = buildFilterParams();
-  const active = Object.entries(params)
-    .filter(([k]) => !['sortCol','sortDir'].includes(k))
-    .some(([,v]) => v !== '');
-  const el = document.getElementById('activeFiltersIndicator');
-  el.style.display = active ? 'block' : 'none!important';
-}
-
-// ── Sorting ──────────────────────────────────────────────────
-function sortBy(col) {
-  if (state.sortCol === col) {
-    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    state.sortCol = col;
-    state.sortDir = 'asc';
-  }
-  updateSortIcons();
-  loadExperiments();
-}
-
-function updateSortIcons() {
-  document.querySelectorAll('.sort-icon').forEach(el => el.classList.remove('active'));
-  const icon = document.getElementById('sort-' + state.sortCol);
-  if (icon) {
-    icon.classList.add('active');
-    icon.className = icon.className.replace(/bi-arrow-down-up|bi-arrow-up|bi-arrow-down/g, '');
-    icon.classList.add(state.sortDir === 'asc' ? 'bi-arrow-up' : 'bi-arrow-down');
-  }
-}
-
-// ── View Switching ────────────────────────────────────────────
-function setView(view) {
-  state.currentView = view;
-  document.getElementById('tableView').classList.toggle('d-none', view !== 'table');
-  document.getElementById('cardsView').classList.toggle('d-none', view !== 'cards');
-  document.getElementById('btnTable').classList.toggle('active', view === 'table');
-  document.getElementById('btnCards').classList.toggle('active', view === 'cards');
-  renderView();
-}
-
-// ── Rendering ────────────────────────────────────────────────
-function renderView() {
-  const { experiments, currentPage, pageSize, currentView } = state;
-  const total = experiments.length;
-  const start = (currentPage - 1) * pageSize;
-  const page  = experiments.slice(start, start + pageSize);
-
-  document.getElementById('resultsCount').textContent = total;
-  document.getElementById('pageInfo').textContent =
-    total === 0 ? '' :
-    `Showing ${start + 1}–${Math.min(start + pageSize, total)} of ${total}`;
-
-  if (currentView === 'table') renderTable(page);
-  else                         renderCards(page);
-
-  renderPagination(total);
-}
-
-function renderTable(data) {
-  const tbody = document.getElementById('tableBody');
-
-  if (data.length === 0) {
-    tbody.innerHTML = `
-      <tr><td colspan="8">
-        <div class="empty-state">
-          <i class="bi bi-search empty-icon"></i>
-          <p class="mb-1">No experiments match your filters.</p>
-          <a href="#" onclick="clearFilters(); return false;">Clear filters</a> or
-          <a href="#" onclick="openAddModal(); return false;">add a new experiment</a>.
-        </div>
-      </td></tr>`;
+function render(){
+  var q=g('si').value.toLowerCase();
+  var f=experiments.filter(function(e){
+    var matchStatus=(curF==='All'||e['Status']===curF);
+    var matchSearch=!q||(e['Title']||'').toLowerCase().includes(q)||
+      (e['Hypothesis']||'').toLowerCase().includes(q)||
+      (e['Tags']||'').toLowerCase().includes(q)||
+      (e['Researcher']||'').toLowerCase().includes(q)||
+      (e['Description']||'').toLowerCase().includes(q)||
+      (e['Category']||'').toLowerCase().includes(q);
+    return matchStatus&&matchSearch;
+  });
+  g('cnt').textContent=f.length+' '+(f.length===1?'experiment':'experiments');
+  if(!f.length){
+    g('grid').style.display='none';
+    g('empty').style.display='block';
+    g('et').textContent=experiments.length?'No matching experiments':'No experiments yet';
+    g('es').textContent=experiments.length?'Try adjusting your search or filter.':'Add your first experiment to start tracking.';
+    g('bep').style.display=experiments.length?'none':'inline-flex';
     return;
   }
-
-  tbody.innerHTML = data.map(exp => {
-    const tags    = parseTags(exp.Tags);
-    const tagHtml = tags.slice(0, 3).map(t => `<span class="tag-pill">${esc(t)}</span>`).join('')
-                  + (tags.length > 3 ? `<span class="tag-pill">+${tags.length - 3}</span>` : '');
-
-    return `
-      <tr onclick="showDetail('${escAttr(exp.ID)}')" title="View details">
-        <td data-label="ID">
-          <code class="exp-id">${esc(exp.ID)}</code>
-        </td>
-        <td data-label="Date" class="text-muted small">${formatDate(exp.Timestamp)}</td>
-        <td data-label="Title" class="fw-semibold">${esc(exp.Title)}</td>
-        <td data-label="Researcher">${esc(exp.Researcher)}</td>
-        <td data-label="Category" class="text-muted small">${esc(exp.Category) || '—'}</td>
-        <td data-label="Status">${statusBadge(exp.Status)}</td>
-        <td data-label="Tags">${tagHtml || '<span class="text-muted small">—</span>'}</td>
-        <td class="text-end">
-          <button class="btn btn-sm btn-link view-btn p-0"
-                  onclick="event.stopPropagation(); showDetail('${escAttr(exp.ID)}')"
-                  title="View details">
-            <i class="bi bi-arrow-right-circle fs-5"></i>
-          </button>
-        </td>
-      </tr>`;
+  g('grid').style.display='grid';
+  g('empty').style.display='none';
+  g('grid').innerHTML=f.map(function(e){
+    var st=e['Status']||'Planning';
+    var sk=st.replace(/\s+/g,'-');
+    var tags=(e['Tags']||'').split(',').map(function(t){return t.trim();}).filter(Boolean);
+    var excerpt=e['Description']||e['Hypothesis']||'';
+    return '<div class="card" onclick=\'openEdit('+JSON.stringify(e).replace(/'/g,"&#39;")+')\'>'+
+      '<div class="ct">'+
+      '<div class="ctitle">'+esc(e['Title']||'Untitled')+'</div>'+
+      '<div class="bdg b-'+sk+'"><div class="bd bd-'+sk+'"></div>'+esc(st)+'</div>'+
+      '</div>'+
+      (e['Researcher']?'<div class="clead">\uD83D\uDC64 '+esc(e['Researcher'])+'</div>':'')+
+      (e['Category']?'<div class="ccat">\uD83C\uDFF7 '+esc(e['Category'])+'</div>':'')+
+      (excerpt?'<div class="chyp">'+esc(excerpt)+'</div>':'')+
+      '<div class="cf">'+
+      '<div class="tags">'+tags.slice(0,4).map(function(t){return'<span class="tag">#'+esc(t)+'</span>';}).join('')+'</div>'+
+      (e['Timestamp']?'<div class="dr">'+formatDate(e['Timestamp'])+'</div>':'')+
+      '</div>'+
+      '</div>';
   }).join('');
 }
 
-function renderCards(data) {
-  const container = document.getElementById('cardsContainer');
-
-  if (data.length === 0) {
-    container.innerHTML = `
-      <div class="col-12">
-        <div class="empty-state">
-          <i class="bi bi-search empty-icon"></i>
-          <p class="mb-1">No experiments match your filters.</p>
-          <a href="#" onclick="clearFilters(); return false;">Clear filters</a> or
-          <a href="#" onclick="openAddModal(); return false;">add a new experiment</a>.
-        </div>
-      </div>`;
-    return;
-  }
-
-  container.innerHTML = data.map(exp => {
-    const tags    = parseTags(exp.Tags);
-    const tagHtml = tags.slice(0, 4).map(t => `<span class="tag-pill">${esc(t)}</span>`).join('');
-    const excerpt = (exp.Description || '').substring(0, 160);
-
-    return `
-      <div class="col-12 col-md-6 col-xl-4">
-        <div class="card exp-card" onclick="showDetail('${escAttr(exp.ID)}')" role="button" tabindex="0"
-             onkeydown="if(event.key==='Enter') showDetail('${escAttr(exp.ID)}')">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <span class="card-id">${esc(exp.ID)}</span>
-              ${statusBadge(exp.Status)}
-            </div>
-            <div class="card-title">${esc(exp.Title)}</div>
-            <div class="text-muted small mb-2">
-              <i class="bi bi-person me-1"></i>${esc(exp.Researcher)}
-              ${exp.Category ? `<span class="mx-1">·</span><i class="bi bi-tag me-1"></i>${esc(exp.Category)}` : ''}
-            </div>
-            <div class="card-excerpt">${esc(excerpt)}${exp.Description && exp.Description.length > 160 ? '…' : ''}</div>
-            ${tagHtml ? `<div class="mt-2">${tagHtml}</div>` : ''}
-            <div class="text-muted small mt-2 pt-2 border-top border-light">
-              <i class="bi bi-calendar3 me-1"></i>${formatDate(exp.Timestamp)}
-            </div>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function renderPagination(total) {
-  const pages = Math.ceil(total / state.pageSize);
-  const cur   = state.currentPage;
-  const pag   = document.getElementById('pagination');
-
-  if (pages <= 1) { pag.innerHTML = ''; return; }
-
-  const mkPage = (i) =>
-    `<li class="page-item ${i === cur ? 'active' : ''}">
-       <a class="page-link" onclick="changePage(${i})">${i}</a>
-     </li>`;
-  const ellipsis = `<li class="page-item disabled"><a class="page-link">…</a></li>`;
-
-  let html = `<li class="page-item ${cur === 1 ? 'disabled' : ''}">
-    <a class="page-link" onclick="changePage(${cur - 1})">‹</a></li>`;
-
-  for (let i = 1; i <= pages; i++) {
-    if (i === 1 || i === pages || Math.abs(i - cur) <= 2) {
-      html += mkPage(i);
-    } else if (Math.abs(i - cur) === 3) {
-      html += ellipsis;
-    }
-  }
-
-  html += `<li class="page-item ${cur === pages ? 'disabled' : ''}">
-    <a class="page-link" onclick="changePage(${cur + 1})">›</a></li>`;
-
-  pag.innerHTML = html;
+function formatDate(str){
+  if(!str) return '';
+  var d=new Date(str);
+  if(isNaN(d.getTime())) return str;
+  return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});
 }
 
-function changePage(page) {
-  const pages = Math.ceil(state.experiments.length / state.pageSize);
-  if (page < 1 || page > pages) return;
-  state.currentPage = page;
-  renderView();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function setF(s,b){
+  curF=s;
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on');});
+  b.classList.add('on');
+  render();
 }
 
-// ── Detail Modal ──────────────────────────────────────────────
-function showDetail(id) {
-  const exp = state.experiments.find(e => e.ID === id);
-  if (!exp) return;
-  state.currentExp = exp;
-
-  document.getElementById('detailId').textContent          = exp.ID;
-  document.getElementById('detailStatusBadge').innerHTML   = statusBadge(exp.Status);
-  document.getElementById('detailTitle').textContent       = exp.Title;
-  document.getElementById('detailMeta').textContent        =
-    [exp.Researcher, exp.Category, formatDate(exp.Timestamp)].filter(Boolean).join(' · ');
-
-  const sections = [
-    { label: 'Description',           value: exp.Description,   wide: true  },
-    { label: 'Hypothesis',            value: exp.Hypothesis,    wide: true  },
-    { label: 'Materials / Reagents',  value: exp.Materials,     wide: false },
-    { label: 'Methods / Protocol',    value: exp.Methods,       wide: false },
-    { label: 'Results',               value: exp.Results,       wide: true  },
-    { label: 'Observations',          value: exp.Observations,  wide: true  },
-    { label: 'Notes',                 value: exp.Notes,         wide: true  },
-  ];
-
-  const tags    = parseTags(exp.Tags);
-  const tagHtml = tags.map(t => `<span class="tag-pill">${esc(t)}</span>`).join(' ');
-
-  const metaRow = `
-    <div class="row g-3 mb-4">
-      <div class="col-sm-4 detail-section">
-        <div class="section-label">Category</div>
-        <div class="section-value">${esc(exp.Category) || '<span class="empty">—</span>'}</div>
-      </div>
-      <div class="col-sm-4 detail-section">
-        <div class="section-label">Date Added</div>
-        <div class="section-value">${formatDate(exp.Timestamp)}</div>
-      </div>
-      <div class="col-sm-4 detail-section">
-        <div class="section-label">Tags</div>
-        <div class="section-value">${tagHtml || '<span class="empty">—</span>'}</div>
-      </div>
-    </div>`;
-
-  const sectionHtml = sections
-    .filter(s => s.value && s.value.trim())
-    .map(s => `
-      <div class="col-12${s.wide ? '' : ' col-md-6'} detail-section">
-        <div class="section-label">${s.label}</div>
-        <div class="section-value">${esc(s.value)}</div>
-      </div>`)
-    .join('');
-
-  document.getElementById('detailBody').innerHTML =
-    metaRow + `<div class="row g-3">${sectionHtml}</div>`;
-
-  modalDetail.show();
+function openModal(){
+  editId=null;
+  g('mt').textContent='New Experiment';
+  g('bsv').textContent='Add Experiment';
+  clearForm();
+  g('mov').classList.add('open');
+  setTimeout(function(){g('fTitle').focus();},50);
 }
 
-// ── Add / Edit Modal ──────────────────────────────────────────
-function openAddModal() {
-  state.isEditing = false;
-  document.getElementById('addModalTitle').textContent    = 'Add New Experiment';
-  document.getElementById('submitBtnText').textContent    = 'Save Experiment';
-  document.getElementById('editId').value = '';
-  document.getElementById('expForm').reset();
-  switchTab('basic');
-  modalAdd.show();
+function openEdit(e){
+  editId=e['ID'];
+  g('mt').textContent='Edit Experiment';
+  g('bsv').textContent='Save Changes';
+  g('fTitle').value=e['Title']||'';
+  g('fResearcher').value=e['Researcher']||'';
+  g('fStatus').value=e['Status']||'Planning';
+  g('fCategory').value=e['Category']||'';
+  g('fTags').value=e['Tags']||'';
+  g('fDescription').value=e['Description']||'';
+  g('fHypothesis').value=e['Hypothesis']||'';
+  g('fMaterials').value=e['Materials']||'';
+  g('fMethods').value=e['Methods']||'';
+  g('fResults').value=e['Results']||'';
+  g('fObservations').value=e['Observations']||'';
+  g('fNotes').value=e['Notes']||'';
+  g('mov').classList.add('open');
 }
 
-function openEditModal() {
-  const exp = state.currentExp;
-  if (!exp) return;
-  state.isEditing = true;
+function closeModal(){g('mov').classList.remove('open');editId=null;}
 
-  modalDetail.hide();
-
-  document.getElementById('addModalTitle').textContent    = 'Edit Experiment';
-  document.getElementById('submitBtnText').textContent    = 'Update Experiment';
-  document.getElementById('editId').value                 = exp.ID;
-
-  const fields = ['Title','Researcher','Status','Category','Tags',
-                  'Description','Hypothesis','Materials','Methods',
-                  'Results','Observations','Notes'];
-  fields.forEach(f => {
-    const el = document.getElementById('f' + f);
-    if (el) el.value = exp[f] || '';
-  });
-
-  switchTab('basic');
-  setTimeout(() => modalAdd.show(), 300);
+function clearForm(){
+  ['fTitle','fResearcher','fCategory','fTags','fDescription','fHypothesis',
+   'fMaterials','fMethods','fResults','fObservations','fNotes'].forEach(function(id){g(id).value='';});
+  g('fStatus').value='Planning';
 }
 
-function switchTab(tab) {
-  state.activeTab = tab;
-  ['basic', 'experiment', 'results'].forEach(t => {
-    document.getElementById('tab-' + t).classList.toggle('d-none', t !== tab);
-  });
-  document.querySelectorAll('#formTabs .nav-link').forEach(link => {
-    link.classList.toggle('active', link.dataset.tab === tab);
-  });
-}
-
-function submitExperiment() {
-  const title       = document.getElementById('fTitle').value.trim();
-  const researcher  = document.getElementById('fResearcher').value.trim();
-  const description = document.getElementById('fDescription').value.trim();
-
-  // Client-side validation
-  if (!title) {
-    switchTab('basic');
-    document.getElementById('fTitle').focus();
-    showToast('Title is required.', 'warning');
-    return;
-  }
-  if (!researcher) {
-    switchTab('basic');
-    document.getElementById('fResearcher').focus();
-    showToast('Researcher name is required.', 'warning');
-    return;
-  }
-  if (!description) {
-    switchTab('basic');
-    document.getElementById('fDescription').focus();
-    showToast('Description is required.', 'warning');
-    return;
-  }
-
-  const data = {
-    Title:        title,
-    Researcher:   researcher,
-    Category:     document.getElementById('fCategory').value.trim(),
-    Tags:         document.getElementById('fTags').value.trim(),
-    Status:       document.getElementById('fStatus').value,
-    Description:  description,
-    Hypothesis:   document.getElementById('fHypothesis').value.trim(),
-    Materials:    document.getElementById('fMaterials').value.trim(),
-    Methods:      document.getElementById('fMethods').value.trim(),
-    Results:      document.getElementById('fResults').value.trim(),
-    Observations: document.getElementById('fObservations').value.trim(),
-    Notes:        document.getElementById('fNotes').value.trim(),
+function saveExperiment(){
+  var title=g('fTitle').value.trim();
+  if(!title){g('fTitle').focus();toast('Please enter a title.','error');return;}
+  var btn=g('bsv');
+  btn.disabled=true;
+  var lbl=editId?'Save Changes':'Add Experiment';
+  btn.textContent='Saving\u2026';
+  var data={
+    Title:title,
+    Researcher:g('fResearcher').value.trim(),
+    Status:g('fStatus').value,
+    Category:g('fCategory').value.trim(),
+    Tags:g('fTags').value.trim(),
+    Description:g('fDescription').value.trim(),
+    Hypothesis:g('fHypothesis').value.trim(),
+    Materials:g('fMaterials').value.trim(),
+    Methods:g('fMethods').value.trim(),
+    Results:g('fResults').value.trim(),
+    Observations:g('fObservations').value.trim(),
+    Notes:g('fNotes').value.trim()
   };
-
-  setSubmitLoading(true);
-
-  if (state.isEditing) {
-    const id = document.getElementById('editId').value;
-    google.script.run
-      .withSuccessHandler(result => {
-        setSubmitLoading(false);
-        if (result.success) {
-          modalAdd.hide();
-          showToast('Experiment updated successfully!', 'success');
-          refreshAfterSave();
-        } else {
-          showToast('Error: ' + result.error, 'danger');
-        }
-      })
-      .withFailureHandler(err => {
-        setSubmitLoading(false);
-        showToast('Error: ' + err.message, 'danger');
-      })
-      .updateExperiment(id, data);
+  var done=function(r){
+    btn.disabled=false;btn.textContent=lbl;
+    if(r&&r.error){toast(r.error,'error');return;}
+    if(r&&!r.success&&!r.error){toast('Something went wrong.','error');return;}
+    toast(editId?'Experiment updated \u2713':'Experiment added \u2713','success');
+    closeModal();
+    google.script.run.withSuccessHandler(handleMetaLoaded).withFailureHandler(function(){}).getAppMeta();
+    loadExperiments();
+  };
+  var fail=function(e){btn.disabled=false;btn.textContent=lbl;toast(e.message,'error');};
+  if(editId){
+    google.script.run.withSuccessHandler(done).withFailureHandler(fail).updateExperiment(editId,data);
   } else {
-    google.script.run
-      .withSuccessHandler(result => {
-        setSubmitLoading(false);
-        if (result.success) {
-          modalAdd.hide();
-          showToast('Experiment ' + result.id + ' saved!', 'success');
-          refreshAfterSave();
-        } else {
-          showToast('Error: ' + result.error, 'danger');
-        }
-      })
-      .withFailureHandler(err => {
-        setSubmitLoading(false);
-        showToast('Error: ' + err.message, 'danger');
-      })
-      .addExperiment(data);
+    google.script.run.withSuccessHandler(done).withFailureHandler(fail).addExperiment(data);
   }
 }
 
-function refreshAfterSave() {
-  // Reload metadata (new categories/researchers may exist) and experiments
-  google.script.run.withSuccessHandler(handleMetaLoaded).getAppMeta();
-  loadExperiments();
+function closeCon(){g('cov').classList.remove('open');}
+function doExportAndClose(){closeCon();}
+
+var tt;
+function toast(msg,type){
+  var t=g('toast');
+  t.textContent=msg;
+  t.className='toast show'+(type?' '+type:'');
+  clearTimeout(tt);
+  tt=setTimeout(function(){t.classList.remove('show');},3200);
 }
 
-// ── CSV Export ────────────────────────────────────────────────
-function exportCSV() {
-  const data = state.experiments;
-  if (data.length === 0) {
-    showToast('No data to export.', 'warning');
-    return;
-  }
-
-  const headers = ['ID','Timestamp','Title','Researcher','Category','Tags','Status',
-                   'Description','Hypothesis','Materials','Methods','Results','Observations','Notes'];
-  const csvRows = [
-    headers.join(','),
-    ...data.map(exp =>
-      headers.map(h => `"${(exp[h] || '').replace(/"/g, '""')}"`).join(',')
-    )
-  ];
-
-  const blob = new Blob([csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href     = url;
-  link.download = 'research-experiments-' + new Date().toISOString().slice(0, 10) + '.csv';
-  link.click();
-  URL.revokeObjectURL(url);
-
-  showToast('Exported ' + data.length + ' experiments to CSV.', 'success');
-}
-
-// ── Helpers ───────────────────────────────────────────────────
-function setLoading(show) {
-  document.getElementById('loadingSpinner').classList.toggle('d-none', !show);
-}
-
-function setSubmitLoading(show) {
-  document.getElementById('submitBtn').disabled              = show;
-  document.getElementById('submitSpinner').classList.toggle('d-none', !show);
-  document.getElementById('submitBtnText').textContent       =
-    show ? (state.isEditing ? 'Updating…' : 'Saving…')
-         : (state.isEditing ? 'Update Experiment' : 'Save Experiment');
-}
-
-function statusBadge(status) {
-  const classMap = {
-    'Planning':    's-planning',
-    'In Progress': 's-in-progress',
-    'Completed':   's-completed',
-    'On Hold':     's-on-hold',
-    'Archived':    's-archived',
-  };
-  const cls = classMap[status] || 's-archived';
-  return `<span class="status-badge ${cls}">${esc(status || 'Unknown')}</span>`;
-}
-
-function formatDate(str) {
-  if (!str) return '—';
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return str;
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function parseTags(tagStr) {
-  if (!tagStr) return [];
-  return tagStr.split(',').map(t => t.trim()).filter(Boolean);
-}
-
-// HTML-escape for text content
-function esc(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// HTML-escape for attribute values (quotes already doubled)
-function escAttr(str) {
-  return esc(str).replace(/'/g, '&#39;');
-}
-
-function showToast(msg, type) {
-  const icons = {
-    success: 'bi-check-circle-fill',
-    danger:  'bi-exclamation-triangle-fill',
-    warning: 'bi-exclamation-circle-fill',
-    info:    'bi-info-circle-fill',
-  };
-  const bgMap = {
-    success: 'bg-success',
-    danger:  'bg-danger',
-    warning: 'bg-warning text-dark',
-    info:    'bg-info text-dark',
-  };
-  const toastEl = document.getElementById('toastEl');
-  toastEl.className = 'toast align-items-center border-0 text-white ' + (bgMap[type] || 'bg-secondary');
-  document.getElementById('toastMsg').innerHTML =
-    `<i class="bi ${icons[type] || 'bi-info-circle-fill'} me-2"></i>${esc(msg)}`;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4500 }).show();
-}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){closeModal();closeCon();}
+  if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&g('mov').classList.contains('open'))saveExperiment();
+});
 </script>
