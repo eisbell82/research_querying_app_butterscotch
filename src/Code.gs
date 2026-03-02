@@ -334,3 +334,135 @@ function sanitize_(val) {
   if (val === null || val === undefined) return '';
   return String(val).trim();
 }
+
+// ---- ATTACHMENTS ------------------------------------------------
+
+const ATTACHMENTS_SHEET       = "Attachments";
+const ATTACHMENTS_FOLDER_NAME = "Experiment Attachments";
+const ATT_HEADERS = [
+  "AttachmentID", "ExperimentID", "FileName",
+  "MimeType", "DriveFileID", "ViewLink", "UploadedDate", "Type"
+];
+
+function getOrCreateAttachmentsSheet_() {
+  const ss = getSpreadsheet_();
+  let s = ss.getSheetByName(ATTACHMENTS_SHEET);
+  if (!s) {
+    s = ss.insertSheet(ATTACHMENTS_SHEET);
+    s.appendRow(ATT_HEADERS);
+    const h = s.getRange(1, 1, 1, ATT_HEADERS.length);
+    h.setBackground("#1e3a5f"); h.setFontColor("#fff");
+    h.setFontWeight("bold"); h.setFontSize(11);
+    s.setFrozenRows(1);
+    s.setColumnWidth(1, 160); s.setColumnWidth(2, 160);
+    s.setColumnWidth(3, 240); s.setColumnWidth(4, 200);
+    s.setColumnWidth(5, 180); s.setColumnWidth(6, 300);
+    s.setColumnWidth(7, 180); s.setColumnWidth(8, 80);
+  }
+  return s;
+}
+
+function getOrCreateAttachmentsBaseFolder_() {
+  const ss = getSpreadsheet_();
+  const ssFile = DriveApp.getFileById(ss.getId());
+  const parents = ssFile.getParents();
+  const parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  const found = parent.getFoldersByName(ATTACHMENTS_FOLDER_NAME);
+  return found.hasNext() ? found.next() : parent.createFolder(ATTACHMENTS_FOLDER_NAME);
+}
+
+function getOrCreateExperimentSubfolder_(experimentId) {
+  const base = getOrCreateAttachmentsBaseFolder_();
+  const found = base.getFoldersByName(experimentId);
+  return found.hasNext() ? found.next() : base.createFolder(experimentId);
+}
+
+/**
+ * Uploads a file (CSV or Excel) to Drive and records it in the Attachments sheet.
+ * @param {string} experimentId
+ * @param {string} filename
+ * @param {string} mimeType
+ * @param {string} base64data  - Base64-encoded file contents
+ * @returns {{ success: boolean, attachmentId?: string, error?: string }}
+ */
+function uploadAttachment(experimentId, filename, mimeType, base64data) {
+  try {
+    const bytes  = Utilities.base64Decode(base64data);
+    const blob   = Utilities.newBlob(bytes, mimeType, filename);
+    const folder = getOrCreateExperimentSubfolder_(experimentId);
+    const file   = folder.createFile(blob);
+
+    const attId = "ATT-" + Date.now();
+    const s = getOrCreateAttachmentsSheet_();
+    s.appendRow([
+      attId, experimentId, filename, mimeType,
+      file.getId(), file.getUrl(), new Date().toISOString(), "upload"
+    ]);
+    return { success: true, attachmentId: attId };
+  } catch(e) { return { error: e.message }; }
+}
+
+/**
+ * Returns all attachment records for the given experiment.
+ * @param {string} experimentId
+ * @returns {Object[]}
+ */
+function getAttachments(experimentId) {
+  try {
+    const s = getOrCreateAttachmentsSheet_();
+    const data = s.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    const headers = data[0];
+    return data.slice(1)
+      .filter(r => r[0] && String(r[1]) === String(experimentId))
+      .map(r => {
+        const o = {};
+        headers.forEach((h, i) => { o[h] = String(r[i] || ""); });
+        return o;
+      });
+  } catch(e) { return { error: e.message }; }
+}
+
+/**
+ * Moves the Drive file to trash and removes the record from the Attachments sheet.
+ * @param {string} attachmentId
+ */
+function deleteAttachment(attachmentId) {
+  try {
+    const s = getOrCreateAttachmentsSheet_();
+    const data = s.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(attachmentId)) {
+        const fileId = String(data[i][4]);
+        if (fileId) {
+          try { DriveApp.getFileById(fileId).setTrashed(true); } catch(e) {}
+        }
+        s.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { error: "Attachment not found." };
+  } catch(e) { return { error: e.message }; }
+}
+
+/**
+ * Stores a link to an existing Google Sheet as an attachment record (no file upload).
+ * @param {string} experimentId
+ * @param {string} url   - Full Google Sheets URL
+ * @param {string} name  - Display label (optional)
+ */
+function linkGoogleSheet(experimentId, url, name) {
+  try {
+    if (!url || !url.includes("docs.google.com/spreadsheets")) {
+      return { error: "Please provide a valid Google Sheets URL." };
+    }
+    const attId = "ATT-" + Date.now();
+    const s = getOrCreateAttachmentsSheet_();
+    s.appendRow([
+      attId, experimentId, name || "Linked Google Sheet",
+      "application/vnd.google-apps.spreadsheet",
+      "", url, new Date().toISOString(), "link"
+    ]);
+    return { success: true, attachmentId: attId };
+  } catch(e) { return { error: e.message }; }
+}
