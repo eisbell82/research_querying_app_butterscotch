@@ -132,10 +132,6 @@ function openEdit(e){
   g('attLinkForm').style.display='none';
   linkFormOpen=false;
   loadAttachments(e['ID']);
-  // Show email metadata
-  g('metaSec').style.display='flex';
-  g('mCreatedBy').textContent=e['Created By']||'—';
-  g('mLastEditedBy').textContent=e['Last Edited By']||'—';
   g('mov').classList.add('open');
 }
 

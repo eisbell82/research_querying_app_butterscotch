@@ -16,7 +16,7 @@ const SHEET_NAME = 'Experiments';
 const HEADERS = [
   'ID', 'Timestamp', 'Title', 'Researcher', 'Category', 'Tags',
   'Status', 'Description', 'Hypothesis', 'Materials', 'Methods',
-  'Results', 'Observations', 'Notes', 'Created By', 'Last Edited By'
+  'Results', 'Observations', 'Notes'
 ];
 
 // 0-based column index lookup
@@ -219,7 +219,6 @@ function addExperiment(data) {
     const id = generateId_();
     const timestamp = new Date();
 
-    const userEmail = getCurrentUserEmail_();
     const row = [
       id,
       timestamp,
@@ -234,9 +233,7 @@ function addExperiment(data) {
       sanitize_(data.Methods),
       sanitize_(data.Results),
       sanitize_(data.Observations),
-      sanitize_(data.Notes),
-      userEmail,
-      userEmail
+      sanitize_(data.Notes)
     ];
 
     sheet.appendRow(row);
@@ -280,9 +277,6 @@ function updateExperiment(id, data) {
         sheet.getRange(sheetRow, COL[field] + 1).setValue(sanitize_(data[field]));
       }
     });
-
-    // Always record who last edited this experiment
-    sheet.getRange(sheetRow, COL['Last Edited By'] + 1).setValue(getCurrentUserEmail_());
 
     return { success: true };
   } catch (e) {
@@ -341,13 +335,6 @@ function sanitize_(val) {
   return String(val).trim();
 }
 
-function getCurrentUserEmail_() {
-  try {
-    return Session.getActiveUser().getEmail() || '';
-  } catch(e) {
-    return '';
-  }
-}
 
 // ---- ATTACHMENTS ------------------------------------------------
 
