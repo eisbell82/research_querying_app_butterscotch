@@ -1,0 +1,336 @@
+// ============================================================
+// Research Database - Google Apps Script Backend
+// ============================================================
+//
+// SETUP: Set SPREADSHEET_ID to your Google Sheet's ID.
+// Find it in the Sheet URL:
+//   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+//
+// For container-bound scripts (script created inside the Sheet
+// via Extensions > Apps Script), leave SPREADSHEET_ID empty.
+// ============================================================
+
+const SPREADSHEET_ID = ''; // ← Paste your Spreadsheet ID here (or leave empty for container-bound)
+const SHEET_NAME = 'Experiments';
+
+const HEADERS = [
+  'ID', 'Timestamp', 'Title', 'Researcher', 'Category', 'Tags',
+  'Status', 'Description', 'Hypothesis', 'Materials', 'Methods',
+  'Results', 'Observations', 'Notes'
+];
+
+// 0-based column index lookup
+const COL = {};
+HEADERS.forEach((h, i) => { COL[h] = i; });
+
+const STATUS_OPTIONS = ['Planning', 'In Progress', 'Completed', 'On Hold', 'Archived'];
+
+// ---- ENTRY POINT ------------------------------------------------
+
+/**
+ * Serves the web app. Called automatically by Google when a user
+ * visits the deployment URL.
+ */
+function doGet(e) {
+  try {
+    // Verify spreadsheet is accessible before serving the app
+    getSheet();
+  } catch (err) {
+    return HtmlService.createHtmlOutput(
+      '<html><head><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<style>body{font-family:sans-serif;display:flex;align-items:center;' +
+      'justify-content:center;height:100vh;margin:0;background:#f0f4f8}' +
+      '.card{background:#fff;border-radius:12px;padding:2.5rem;text-align:center;' +
+      'box-shadow:0 4px 20px rgba(0,0,0,.1);max-width:440px}' +
+      'h2{color:#dc2626;margin-bottom:.5rem}p{color:#6b7280;line-height:1.6}' +
+      '</style></head><body><div class="card">' +
+      '<h2>&#9888; Configuration Required</h2>' +
+      '<p>The Research Database has not been configured yet.<br>' +
+      'Please set <code>SPREADSHEET_ID</code> in <strong>Code.gs</strong> and redeploy.</p>' +
+      '<p style="font-size:.85rem;color:#9ca3af">Error: ' + err.message + '</p>' +
+      '</div></body></html>'
+    );
+  }
+
+  const template = HtmlService.createTemplateFromFile('Index');
+  return template
+    .evaluate()
+    .setTitle('Research Database')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Includes an HTML file's content into a template (for CSS/JS).
+ */
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// ---- SHEET ACCESS -----------------------------------------------
+
+function getSpreadsheet_() {
+  if (SPREADSHEET_ID && SPREADSHEET_ID.trim() !== '') {
+    return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+  }
+  // Container-bound: script lives inside the spreadsheet
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function getSheet() {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = initializeSheet_(ss);
+  }
+  return sheet;
+}
+
+function initializeSheet_(ss) {
+  const sheet = ss.insertSheet(SHEET_NAME);
+
+  // Write and style the header row
+  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  headerRange.setValues([HEADERS]);
+  headerRange.setBackground('#1e3a5f');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setFontSize(11);
+  sheet.setFrozenRows(1);
+
+  // Column widths (pixels)
+  const widths = [130, 160, 280, 180, 160, 220, 120, 400, 300, 280, 380, 380, 280, 260];
+  widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
+
+  // Wrap text for content-heavy columns
+  sheet.getRange('H1:N1000').setWrap(true);
+
+  return sheet;
+}
+
+// ---- ID GENERATION ----------------------------------------------
+
+function generateId_() {
+  const sheet = getSheet();
+  const lastRow = Math.max(sheet.getLastRow(), 1);
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const seq = String(lastRow).padStart(4, '0');
+  return 'EXP-' + year + month + '-' + seq;
+}
+
+// ---- CRUD OPERATIONS --------------------------------------------
+
+/**
+ * Returns all experiments matching the given filter params.
+ *
+ * @param {Object} params
+ *   {string}  params.search      - Full-text search across key fields
+ *   {string}  params.category    - Filter by exact category
+ *   {string}  params.status      - Filter by exact status
+ *   {string}  params.researcher  - Filter by exact researcher name
+ *   {string}  params.dateFrom    - ISO date string lower bound (inclusive)
+ *   {string}  params.dateTo      - ISO date string upper bound (inclusive)
+ *   {string}  params.sortCol     - Column name to sort by (default: Timestamp)
+ *   {string}  params.sortDir     - 'asc' or 'desc' (default: desc)
+ * @returns {Object[]} Array of experiment objects
+ */
+function getExperiments(params) {
+  const sheet = getSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  const tz = Session.getScriptTimeZone();
+  const raw = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+
+  let experiments = raw
+    .filter(row => row[COL['ID']] !== '')
+    .map(row => {
+      const exp = {};
+      HEADERS.forEach((h, i) => {
+        exp[h] = (row[i] instanceof Date)
+          ? Utilities.formatDate(row[i], tz, 'yyyy-MM-dd HH:mm')
+          : String(row[i] === null || row[i] === undefined ? '' : row[i]);
+      });
+      return exp;
+    });
+
+  if (!params) return experiments;
+
+  const { search, category, status, researcher, dateFrom, dateTo } = params;
+
+  if (search && search.trim()) {
+    const term = search.trim().toLowerCase();
+    const searchFields = ['Title', 'Description', 'Researcher', 'Category', 'Tags',
+                          'Hypothesis', 'Methods', 'Results', 'Observations', 'ID'];
+    experiments = experiments.filter(exp =>
+      searchFields.some(f => exp[f].toLowerCase().includes(term))
+    );
+  }
+
+  if (category) {
+    experiments = experiments.filter(exp => exp['Category'] === category);
+  }
+  if (status) {
+    experiments = experiments.filter(exp => exp['Status'] === status);
+  }
+  if (researcher) {
+    experiments = experiments.filter(exp => exp['Researcher'] === researcher);
+  }
+  if (dateFrom) {
+    const from = new Date(dateFrom);
+    experiments = experiments.filter(exp => new Date(exp['Timestamp']) >= from);
+  }
+  if (dateTo) {
+    const to = new Date(dateTo);
+    to.setHours(23, 59, 59, 999);
+    experiments = experiments.filter(exp => new Date(exp['Timestamp']) <= to);
+  }
+
+  // Sort
+  const sortCol = (params.sortCol && HEADERS.includes(params.sortCol)) ? params.sortCol : 'Timestamp';
+  const sortDir = params.sortDir === 'asc' ? 1 : -1;
+  experiments.sort((a, b) => {
+    let va = a[sortCol] || '';
+    let vb = b[sortCol] || '';
+    if (sortCol === 'Timestamp') {
+      va = new Date(va).getTime() || 0;
+      vb = new Date(vb).getTime() || 0;
+    } else {
+      va = va.toLowerCase();
+      vb = vb.toLowerCase();
+    }
+    return va < vb ? -sortDir : va > vb ? sortDir : 0;
+  });
+
+  return experiments;
+}
+
+/**
+ * Appends a new experiment row to the sheet.
+ *
+ * @param {Object} data  Experiment fields (Title, Researcher, etc.)
+ * @returns {{ success: boolean, id?: string, error?: string }}
+ */
+function addExperiment(data) {
+  try {
+    const sheet = getSheet();
+    const id = generateId_();
+    const timestamp = new Date();
+
+    const row = [
+      id,
+      timestamp,
+      sanitize_(data.Title),
+      sanitize_(data.Researcher),
+      sanitize_(data.Category),
+      sanitize_(data.Tags),
+      sanitize_(data.Status) || 'Planning',
+      sanitize_(data.Description),
+      sanitize_(data.Hypothesis),
+      sanitize_(data.Materials),
+      sanitize_(data.Methods),
+      sanitize_(data.Results),
+      sanitize_(data.Observations),
+      sanitize_(data.Notes)
+    ];
+
+    sheet.appendRow(row);
+
+    // Alternate row shading for readability
+    const newRow = sheet.getLastRow();
+    if (newRow % 2 === 0) {
+      sheet.getRange(newRow, 1, 1, HEADERS.length).setBackground('#f0f4f8');
+    }
+
+    return { success: true, id: id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Updates specific fields of an existing experiment.
+ *
+ * @param {string} id    Experiment ID (e.g. "EXP-202403-0005")
+ * @param {Object} data  Fields to update (only provided keys are changed)
+ * @returns {{ success: boolean, error?: string }}
+ */
+function updateExperiment(id, data) {
+  try {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false, error: 'No experiments found' };
+
+    const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    const rowIndex = ids.indexOf(id);
+    if (rowIndex === -1) return { success: false, error: 'Experiment ' + id + ' not found' };
+
+    const sheetRow = rowIndex + 2; // 1-indexed + header offset
+    const updatable = ['Title', 'Researcher', 'Category', 'Tags', 'Status',
+                       'Description', 'Hypothesis', 'Materials', 'Methods',
+                       'Results', 'Observations', 'Notes'];
+
+    updatable.forEach(field => {
+      if (data[field] !== undefined) {
+        sheet.getRange(sheetRow, COL[field] + 1).setValue(sanitize_(data[field]));
+      }
+    });
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Returns sorted unique category values from the sheet.
+ * @returns {string[]}
+ */
+function getCategories() {
+  try {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return [];
+    const vals = sheet.getRange(2, COL['Category'] + 1, lastRow - 1, 1).getValues().flat();
+    return [...new Set(vals.filter(v => v && v !== ''))].sort();
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Returns sorted unique researcher names from the sheet.
+ * @returns {string[]}
+ */
+function getResearchers() {
+  try {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return [];
+    const vals = sheet.getRange(2, COL['Researcher'] + 1, lastRow - 1, 1).getValues().flat();
+    return [...new Set(vals.filter(v => v && v !== ''))].sort();
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Returns app metadata needed on page load.
+ * @returns {{ statuses: string[], categories: string[], researchers: string[] }}
+ */
+function getAppMeta() {
+  return {
+    statuses: STATUS_OPTIONS,
+    categories: getCategories(),
+    researchers: getResearchers()
+  };
+}
+
+// ---- HELPERS ----------------------------------------------------
+
+function sanitize_(val) {
+  if (val === null || val === undefined) return '';
+  return String(val).trim();
+}
