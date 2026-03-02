@@ -107,6 +107,7 @@ function openModal(){
   g('bsv').textContent='Add Experiment';
   clearForm();
   g('attSec').style.display='none';
+  g('metaSec').style.display='none';
   g('mov').classList.add('open');
   setTimeout(function(){g('fTitle').focus();},50);
 }
@@ -131,6 +132,10 @@ function openEdit(e){
   g('attLinkForm').style.display='none';
   linkFormOpen=false;
   loadAttachments(e['ID']);
+  // Show email metadata
+  g('metaSec').style.display='flex';
+  g('mCreatedBy').textContent=e['Created By']||'—';
+  g('mLastEditedBy').textContent=e['Last Edited By']||'—';
   g('mov').classList.add('open');
 }
 

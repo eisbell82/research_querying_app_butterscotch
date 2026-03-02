@@ -16,7 +16,7 @@ const SHEET_NAME = 'Experiments';
 const HEADERS = [
   'ID', 'Timestamp', 'Title', 'Researcher', 'Category', 'Tags',
   'Status', 'Description', 'Hypothesis', 'Materials', 'Methods',
-  'Results', 'Observations', 'Notes'
+  'Results', 'Observations', 'Notes', 'Created By', 'Last Edited By'
 ];
 
 // 0-based column index lookup
@@ -99,11 +99,11 @@ function initializeSheet_(ss) {
   sheet.setFrozenRows(1);
 
   // Column widths (pixels)
-  const widths = [130, 160, 280, 180, 160, 220, 120, 400, 300, 280, 380, 380, 280, 260];
+  const widths = [130, 160, 280, 180, 160, 220, 120, 400, 300, 280, 380, 380, 280, 260, 220, 220];
   widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   // Wrap text for content-heavy columns
-  sheet.getRange('H1:N1000').setWrap(true);
+  sheet.getRange('H1:P1000').setWrap(true);
 
   return sheet;
 }
@@ -219,6 +219,7 @@ function addExperiment(data) {
     const id = generateId_();
     const timestamp = new Date();
 
+    const userEmail = getCurrentUserEmail_();
     const row = [
       id,
       timestamp,
@@ -233,7 +234,9 @@ function addExperiment(data) {
       sanitize_(data.Methods),
       sanitize_(data.Results),
       sanitize_(data.Observations),
-      sanitize_(data.Notes)
+      sanitize_(data.Notes),
+      userEmail,
+      userEmail
     ];
 
     sheet.appendRow(row);
@@ -277,6 +280,9 @@ function updateExperiment(id, data) {
         sheet.getRange(sheetRow, COL[field] + 1).setValue(sanitize_(data[field]));
       }
     });
+
+    // Always record who last edited this experiment
+    sheet.getRange(sheetRow, COL['Last Edited By'] + 1).setValue(getCurrentUserEmail_());
 
     return { success: true };
   } catch (e) {
@@ -333,6 +339,14 @@ function getAppMeta() {
 function sanitize_(val) {
   if (val === null || val === undefined) return '';
   return String(val).trim();
+}
+
+function getCurrentUserEmail_() {
+  try {
+    return Session.getActiveUser().getEmail() || '';
+  } catch(e) {
+    return '';
+  }
 }
 
 // ---- ATTACHMENTS ------------------------------------------------
